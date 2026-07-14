@@ -1,4 +1,5 @@
 import sys
+import os
 from pathlib import Path
 
 TESTS_DIR = Path(__file__).resolve().parent / "tests"
@@ -80,3 +81,45 @@ def pytest_report_header(config):
     if target is None or count is None:
         return None
     return f"rocjitsu corpus target={target} selected_cases={count}"
+
+
+def pytest_configure(config):
+    if _requested_numprocesses(config) <= 1:
+        return
+    if hasattr(config.option, "loadgroup"):
+        config.option.loadgroup = True
+    if not hasattr(config.option, "dist"):
+        return
+    if getattr(config.option, "dist", None) in (None, "", "no", "load"):
+        config.option.dist = "loadgroup"
+
+
+def pytest_xdist_make_scheduler(config, log):
+    if _requested_numprocesses(config) <= 1:
+        return None
+    from xdist.scheduler.loadgroup import LoadGroupScheduling
+
+    return LoadGroupScheduling(config, log)
+
+
+def _requested_numprocesses(config) -> int:
+    worker_count = os.getenv("PYTEST_XDIST_WORKER_COUNT")
+    if worker_count:
+        try:
+            return max(1, int(worker_count))
+        except ValueError:
+            pass
+    numprocesses = getattr(config.option, "numprocesses", None)
+    if numprocesses in (None, 0, "0"):
+        return 1
+    if isinstance(numprocesses, int):
+        return max(1, numprocesses)
+    text = str(numprocesses).strip().lower()
+    if text in {"", "no"}:
+        return 1
+    if text in {"auto", "logical"}:
+        return max(1, os.cpu_count() or 1)
+    try:
+        return max(1, int(text))
+    except ValueError:
+        return 1
