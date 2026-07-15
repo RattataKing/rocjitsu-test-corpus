@@ -224,14 +224,17 @@ def compile_source(*, source, vmfb_name, case, target_config, artifact_root):
     source = Path(source).resolve()
     if not source.exists():
         raise FileNotFoundError(source)
+    artifact_root = Path(artifact_root).resolve()
 
     compile_flags = (
         list(target_config.get("iree_compile_flags", [])) + list(case.get("compile_flags", []))
     )
     cache_key = (
+        str(artifact_root),
+        target_config["config_name"],
         str(source),
-        tuple(target_config.get("iree_compile_flags", [])),
-        tuple(case.get("compile_flags", [])),
+        Path(vmfb_name).name,
+        tuple(compile_flags),
     )
     cached = _COMPILE_CACHE.get(cache_key)
     if cached and cached.exists():
